@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>g2_helloworld</title>
+    <style>
+      *, *::before, *::after { box-sizing: border-box; }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-start;
+        min-height: 100vh;
+        margin: 0;
+        padding: 40px 16px;
+        background: #f0f0f0;
+      }
+      #qr-container {
+        background: #fff;
+        padding: 32px 40px;
+        border-radius: 16px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+        text-align: center;
+        width: 380px;
+      }
+      #qr-container h1 {
+        margin: 0 0 8px;
+        font-size: 22px;
+        color: #111;
+      }
+      p.lead {
+        margin: 0 0 16px;
+        font-size: 14px;
+        color: #555;
+        line-height: 1.6;
+      }
+      ol.steps {
+        text-align: left;
+        margin: 0 0 20px;
+        padding-left: 20px;
+        font-size: 14px;
+        color: #333;
+        line-height: 1.8;
+      }
+      #qrcode canvas {
+        display: block;
+        margin: 0 auto;
+        border-radius: 8px;
+      }
+      #qr-url {
+        margin: 12px 0 0;
+        font-size: 12px;
+        color: #888;
+        word-break: break-all;
+      }
+      #text-sender {
+        background: #fff;
+        padding: 24px 32px;
+        border-radius: 16px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+        width: 380px;
+        margin-top: 20px;
+        display: none;
+      }
+      #text-sender h2 {
+        margin: 0 0 12px;
+        font-size: 16px;
+        color: #111;
+      }
+      #text-input {
+        width: 100%;
+        padding: 10px 12px;
+        font-size: 15px;
+        font-family: inherit;
+        border: 1px solid #ccc;
+        border-radius: 8px;
+        outline: none;
+        resize: vertical;
+        min-height: 80px;
+        transition: border-color 0.2s;
+      }
+      #text-input:focus { border-color: #555; }
+      #send-btn {
+        margin-top: 10px;
+        width: 100%;
+        padding: 10px;
+        font-size: 15px;
+        font-weight: 600;
+        background: #111;
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+      #send-btn:hover:not(:disabled) { background: #333; }
+      #send-btn:disabled { background: #aaa; cursor: not-allowed; }
+      #send-status {
+        margin-top: 8px;
+        font-size: 12px;
+        color: #888;
+        min-height: 18px;
+        text-align: center;
+      }
+      #event-monitor {
+        background: #fff;
+        padding: 24px 32px;
+        border-radius: 16px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+        width: 380px;
+        margin-top: 20px;
+        display: none;
+      }
+      #event-monitor h2 {
+        margin: 0 0 14px;
+        font-size: 16px;
+        color: #111;
+      }
+      .event-indicators {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+      .event-chip {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 14px 10px;
+        border-radius: 10px;
+        background: #f5f5f5;
+        font-size: 13px;
+        font-weight: 600;
+        color: #555;
+        transition: background 0.15s, color 0.15s, transform 0.1s;
+      }
+      .event-chip.active {
+        background: #111;
+        color: #fff;
+        transform: scale(1.04);
+      }
+      .event-chip.warn.active {
+        background: #c0392b;
+        color: #fff;
+      }
+      .event-chip .icon { font-size: 20px; line-height: 1; }
+      #event-log {
+        margin-top: 14px;
+        max-height: 120px;
+        overflow-y: auto;
+        font-size: 12px;
+        color: #555;
+        border-top: 1px solid #eee;
+        padding-top: 10px;
+      }
+      #event-log .log-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 2px 0;
+      }
+      #event-log .log-row .log-time { color: #aaa; flex-shrink: 0; margin-left: 8px; }
+    </style>
+  </head>
+  <body>
+    <div id="qr-container">
+      <h1>Sideload to G2</h1>
+      <p class="lead">To launch this app on your Even G2, scan the QR code below with the Even Hub companion app.</p>
+      <ol class="steps">
+        <li>Please register developer account on <strong>Even Hub</strong></li>
+        <li>Open the Even app, Open Even Hub Apps and My plugin page (on top right icon) and tap your name then tap <strong>"Prototype mode"</strong></li>
+        <li>Point the camera at the QR code</li>
+      </ol>
+      <div id="qrcode"></div>
+      <p id="qr-url"></p>
+    </div>
+    <div id="text-sender">
+      <h2>Send text to glasses</h2>
+      <textarea id="text-input" maxlength="1000" placeholder="Type a message... (Ctrl+Enter to send)"></textarea>
+      <button id="send-btn">Send</button>
+      <div id="send-status">Connect the glasses first via QR code above.</div>
+    </div>
+
+    <div id="event-monitor">
+      <h2>G2 Input Events</h2>
+      <div class="event-indicators">
+        <div class="event-chip" id="chip-tap"><span class="icon">👆</span> Tap</div>
+        <div class="event-chip" id="chip-double-tap"><span class="icon">✌️</span> Double Tap</div>
+        <div class="event-chip" id="chip-scroll-up"><span class="icon">⬆️</span> Scroll Up</div>
+        <div class="event-chip" id="chip-scroll-down"><span class="icon">⬇️</span> Scroll Down</div>
+        <div class="event-chip warn" id="chip-abnormal-exit"><span class="icon">⚠️</span> Abnormal Exit</div>
+        <div class="event-chip warn" id="chip-system-exit"><span class="icon">🔴</span> System Exit</div>
+      </div>
+      <div id="event-log"></div>
+    </div>
+
+    <div id="app"></div>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+    <script>
+      (function () {
+        const url = window.location.href;
+        document.getElementById('qr-url').textContent = url;
+        QRCode.toCanvas(document.createElement('canvas'), url, { width: 300 }, function (err, canvas) {
+          if (!err) document.getElementById('qrcode').appendChild(canvas);
+        });
+      })();
+    </script>
+    <script type="module" src="/src/main.ts"></script>
+    <script>
+      (function () {
+        const btn = document.getElementById('send-btn');
+        const input = document.getElementById('text-input');
+        const status = document.getElementById('send-status');
+        const COOLDOWN_MS = 2000;
+        let cooldownEnd = 0;
+        let tickTimer = null;
+
+        function setCooldown() {
+          cooldownEnd = Date.now() + COOLDOWN_MS;
+          btn.disabled = true;
+          if (tickTimer) clearInterval(tickTimer);
+          tickTimer = setInterval(function () {
+            const remaining = Math.ceil((cooldownEnd - Date.now()) / 1000);
+            if (remaining > 0) {
+              status.textContent = 'Next send available in ' + remaining + 's...';
+            } else {
+              clearInterval(tickTimer);
+              tickTimer = null;
+              btn.disabled = false;
+              status.textContent = 'Ready.';
+            }
+          }, 100);
+        }
+
+        function trySend() {
+          const text = input.value.trim();
+          if (!text) return;
+          if (typeof window.sendToGlasses !== 'function') {
+            status.textContent = 'Bridge not ready yet. Is the app running on the glasses?';
+            return;
+          }
+          window.sendToGlasses(text);
+          setCooldown();
+        }
+
+        btn.addEventListener('click', trySend);
+        input.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter' && e.ctrlKey && !btn.disabled) {
+            e.preventDefault();
+            trySend();
+          }
+        });
+
+        window.addEventListener('glasses-ready', function (e) {
+          document.getElementById('qr-container').style.display = 'none';
+          document.getElementById('text-sender').style.display = 'block';
+          document.getElementById('event-monitor').style.display = 'block';
+          const saved = e.detail && e.detail.savedText;
+          if (saved) {
+            input.value = saved;
+            status.textContent = 'Last message restored.';
+          } else {
+            status.textContent = 'Ready.';
+          }
+        });
+
+        window.addEventListener('glasses-sent', function (e) {
+          status.textContent = 'Sent: "' + e.detail.text + '"';
+        });
+      })();
+    </script>
+    <script>
+      (function () {
+        const CHIP_IDS = {
+          'tap':            'chip-tap',
+          'double-tap':     'chip-double-tap',
+          'scroll-up':      'chip-scroll-up',
+          'scroll-down':    'chip-scroll-down',
+          'abnormal-exit':  'chip-abnormal-exit',
+          'system-exit':    'chip-system-exit',
+        };
+        const LABELS = {
+          'tap':            'Tap',
+          'double-tap':     'Double Tap',
+          'scroll-up':      'Scroll Up',
+          'scroll-down':    'Scroll Down',
+          'abnormal-exit':  'Abnormal Exit',
+          'system-exit':    'System Exit',
+        };
+        const activeTimers = {};
+
+        function pad(n) { return String(n).padStart(2, '0'); }
+        function timeStr() {
+          const d = new Date();
+          return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+        }
+
+        window.addEventListener('glasses-input', function (e) {
+          const name = e.detail.name;
+          const chipId = CHIP_IDS[name];
+          if (!chipId) return;
+
+          // Highlight chip
+          const chip = document.getElementById(chipId);
+          chip.classList.add('active');
+          if (activeTimers[name]) clearTimeout(activeTimers[name]);
+          activeTimers[name] = setTimeout(function () {
+            chip.classList.remove('active');
+          }, 400);
+
+          // Append log row
+          const log = document.getElementById('event-log');
+          const row = document.createElement('div');
+          row.className = 'log-row';
+          row.innerHTML = '<span>' + LABELS[name] + '</span><span class="log-time">' + timeStr() + '</span>';
+          log.insertBefore(row, log.firstChild);
+          // Keep at most 30 entries
+          while (log.children.length > 30) log.removeChild(log.lastChild);
+        });
+      })();
+    </script>
+  </body>
+</html>
