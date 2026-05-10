@@ -1,5 +1,7 @@
 # g2_helloworld
 
+[日本語版 README はこちら](README_ja.md)
+
 **A sideload app demo for Even Realities G2 smart glasses**
 
 ... and Websocket demo.
@@ -7,7 +9,7 @@
 **Author:** gpsnmeajp  
 **License:** Unlicense
 
-Demo(QR Code): https://sabowl.sakura.ne.jp/g2/helloworld/
+Demo(Quick sideload QR Code included!): https://sabowl.sakura.ne.jp/g2/helloworld/
 
 Ref: https://zenn.dev/gpsnmeajp/scraps/beb45043a2d731
 
@@ -43,7 +45,7 @@ Ref: https://zenn.dev/gpsnmeajp/scraps/beb45043a2d731
 - Even app (iOS / Android)
 - [Even Hub **developer account**](https://hub.evenrealities.com/)
 - Node.js 18+
-- PC and glasses on the **same Wi-Fi network**
+- PC and glasses on the **same Wi-Fi network** (when you local testing.)
 
 ---
 
