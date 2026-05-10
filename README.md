@@ -2,6 +2,8 @@
 
 **A sideload app demo for Even Realities G2 smart glasses**
 
+... and Websocket demo.
+
 **Author:** gpsnmeajp  
 **License:** Unlicense
 
