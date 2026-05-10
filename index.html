@@ -97,6 +97,23 @@
       }
       #send-btn:hover:not(:disabled) { background: #333; }
       #send-btn:disabled { background: #aaa; cursor: not-allowed; }
+      .auto-clear-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 10px;
+      }
+      .auto-clear-row label { font-size: 13px; color: #555; flex-shrink: 0; }
+      #auto-clear-input {
+        width: 68px;
+        padding: 6px 8px;
+        font-size: 13px;
+        border: 1px solid #ccc;
+        border-radius: 8px;
+        outline: none;
+      }
+      .auto-clear-unit { font-size: 12px; color: #888; }
+      #auto-clear-status { font-size: 11px; color: #888; margin-top: 4px; }
       .action-row {
         display: flex;
         gap: 8px;
@@ -198,6 +215,52 @@
         overflow-y: auto;
         font-family: monospace;
       }
+      #ws-panel {
+        background: #fff;
+        padding: 24px 32px;
+        border-radius: 16px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+        width: 380px;
+        margin-top: 20px;
+      }
+      #ws-panel h2 { margin: 0 0 4px; font-size: 16px; color: #111; }
+      #ws-api-hint {
+        font-size: 11px;
+        color: #888;
+        margin: 0 0 12px;
+        line-height: 1.6;
+        background: #f7f7f7;
+        border-radius: 6px;
+        padding: 8px 10px;
+      }
+      #ws-api-hint code { font-family: monospace; color: #555; }
+      #ws-url-input {
+        width: 100%;
+        padding: 9px 12px;
+        font-size: 14px;
+        border: 1px solid #ccc;
+        border-radius: 8px;
+        outline: none;
+        transition: border-color 0.2s;
+      }
+      #ws-url-input:focus { border-color: #555; }
+      #ws-status-bar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 10px;
+        font-size: 12px;
+        color: #555;
+      }
+      #ws-dot {
+        width: 10px; height: 10px;
+        border-radius: 50%;
+        background: #ccc;
+        flex-shrink: 0;
+      }
+      #ws-dot.connected { background: #27ae60; }
+      #ws-dot.connecting { background: #f39c12; }
+      #ws-dot.disconnected { background: #ccc; }
     </style>
   </head>
   <body>
@@ -220,6 +283,14 @@
         <button class="action-btn danger" id="clear-storage-btn">Clear Storage</button>
         <button class="action-btn" id="reload-btn">Reload</button>
       </div>
+      <div class="auto-clear-row">
+        <label for="auto-clear-input">Auto clear:</label>
+        <input id="auto-clear-input" type="number" min="0.1" step="0.1" placeholder="sec" />
+        <span class="auto-clear-unit">s</span>
+        <button class="action-btn" id="auto-clear-set-btn">Set</button>
+        <button class="action-btn danger" id="auto-clear-clr-btn">Clear</button>
+      </div>
+      <div id="auto-clear-status"></div>
       <div id="send-status">Connect the glasses first via QR code above.</div>
     </div>
 
@@ -234,6 +305,26 @@
         <div class="event-chip warn" id="chip-system-exit"><span class="icon">🔴</span> System Exit</div>
       </div>
       <div id="event-log"></div>
+    </div>
+
+    <div id="ws-panel">
+      <h2>WebSocket</h2>
+      <div id="ws-api-hint">
+        <strong>Server → Client:</strong> Send any plain text frame — it will be displayed on the glasses and in the textbox above.<br>
+        <strong>Client → Server:</strong> G2 input events are sent as JSON:<br>
+        <code>{"type":"glasses-input","event":"tap","timestamp":1234567890}</code><br>
+        Events: <code>tap</code>, <code>double-tap</code>, <code>scroll-up</code>, <code>scroll-down</code>, <code>abnormal-exit</code>, <code>system-exit</code>
+      </div>
+      <input id="ws-url-input" type="url" placeholder="ws://192.168.x.x:8080" />
+      <div class="action-row" style="margin-top:8px;">
+        <button class="action-btn" id="ws-connect-btn">Connect</button>
+        <button class="action-btn" id="ws-disconnect-btn">Disconnect</button>
+        <button class="action-btn danger" id="ws-clear-btn">Clear URL</button>
+      </div>
+      <div id="ws-status-bar">
+        <div id="ws-dot"></div>
+        <span id="ws-status-text">Disconnected</span>
+      </div>
     </div>
 
     <div id="console-output-panel">
@@ -329,6 +420,46 @@
         document.getElementById('reload-btn').addEventListener('click', function () {
           window.location.reload();
         });
+
+        // --- Auto-clear controls ---
+        var acInput  = document.getElementById('auto-clear-input');
+        var acSetBtn = document.getElementById('auto-clear-set-btn');
+        var acClrBtn = document.getElementById('auto-clear-clr-btn');
+        var acStatus = document.getElementById('auto-clear-status');
+
+        function applyAutoClear() {
+          var sec = parseFloat(acInput.value);
+          if (isNaN(sec) || sec <= 0) {
+            acStatus.textContent = 'Enter a positive number of seconds.';
+            return;
+          }
+          var ms = Math.round(sec * 1000);
+          if (typeof window.setAutoClear === 'function') window.setAutoClear(ms);
+        }
+
+        acSetBtn.addEventListener('click', applyAutoClear);
+        acInput.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') { e.preventDefault(); applyAutoClear(); }
+        });
+        acClrBtn.addEventListener('click', function () {
+          if (typeof window.clearAutoClear === 'function') window.clearAutoClear();
+          acInput.value = '';
+        });
+
+        window.addEventListener('auto-clear-restored', function (e) {
+          var ms = e.detail && e.detail.ms;
+          if (ms > 0) {
+            acInput.value = (ms / 1000).toString();
+            acStatus.textContent = 'Auto clear: ' + (ms / 1000) + 's (restored)';
+          }
+        });
+        window.addEventListener('auto-clear-changed', function (e) {
+          var ms = e.detail && e.detail.ms;
+          acStatus.textContent = ms > 0 ? 'Auto clear: ' + (ms / 1000) + 's' : 'Auto clear: disabled';
+        });
+        window.addEventListener('glasses-auto-cleared', function () {
+          acStatus.textContent = 'Display cleared.';
+        });
       })();
     </script>
     <script>
@@ -378,6 +509,81 @@
           log.insertBefore(row, log.firstChild);
           // Keep at most 30 entries
           while (log.children.length > 30) log.removeChild(log.lastChild);
+        });
+      })();
+    </script>
+    <script>
+      /* WebSocket panel controller */
+      (function () {
+        var urlInput      = document.getElementById('ws-url-input');
+        var connectBtn    = document.getElementById('ws-connect-btn');
+        var disconnectBtn = document.getElementById('ws-disconnect-btn');
+        var clearBtn      = document.getElementById('ws-clear-btn');
+        var dot           = document.getElementById('ws-dot');
+        var statusText    = document.getElementById('ws-status-text');
+        var textInput     = document.getElementById('text-input');
+
+        function setStatus(cls, label) {
+          dot.className = cls;
+          statusText.textContent = label;
+        }
+
+        function tryConnect() {
+          var url = urlInput.value.trim();
+          if (!url) { setStatus('disconnected', 'Please enter a WebSocket URL.'); return; }
+          if (typeof window.wsConnect !== 'function') {
+            setStatus('disconnected', 'Bridge not ready yet.');
+            return;
+          }
+          window.wsConnect(url);
+        }
+
+        connectBtn.addEventListener('click', tryConnect);
+        urlInput.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') { e.preventDefault(); tryConnect(); }
+        });
+
+        disconnectBtn.addEventListener('click', function () {
+          if (typeof window.wsDisconnect === 'function') window.wsDisconnect();
+        });
+
+        clearBtn.addEventListener('click', function () {
+          if (typeof window.wsClearUrl === 'function') {
+            window.wsClearUrl();
+          } else {
+            urlInput.value = '';
+          }
+        });
+
+        /* Restore saved URL into the input field */
+        window.addEventListener('ws-url-restored', function (e) {
+          if (e.detail && e.detail.url) urlInput.value = e.detail.url;
+        });
+
+        /* Update status badge from main.ts events */
+        window.addEventListener('ws-status', function (e) {
+          var s = e.detail && e.detail.status;
+          var d = (e.detail && e.detail.detail) || '';
+          if (s === 'connected') {
+            setStatus('connected', 'Connected' + (d ? ': ' + d : ''));
+          } else if (s === 'connecting') {
+            setStatus('connecting', 'Connecting\u2026' + (d ? ' ' + d : ''));
+          } else {
+            setStatus('disconnected', 'Disconnected' + (d ? ': ' + d : ''));
+          }
+        });
+
+        /* Update URL cleared */
+        window.addEventListener('ws-url-cleared', function () {
+          urlInput.value = '';
+          setStatus('disconnected', 'URL cleared.');
+        });
+
+        /* Text received from WebSocket server -> fill textbox */
+        window.addEventListener('ws-text-received', function (e) {
+          if (e.detail && e.detail.text && textInput) {
+            textInput.value = e.detail.text;
+          }
         });
       })();
     </script>

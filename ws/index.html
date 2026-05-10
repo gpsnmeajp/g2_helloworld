@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>G2 Dashboard</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0f1117;
+      --surface:   #1a1d27;
+      --border:    #2a2d3a;
+      --accent:    #4ade80;
+      --accent2:   #60a5fa;
+      --warn:      #fbbf24;
+      --danger:    #f87171;
+      --text:      #e2e8f0;
+      --muted:     #6b7280;
+      --radius:    10px;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 14px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 16px 40px;
+      gap: 20px;
+    }
+
+    /* ---- Header ---- */
+    header {
+      width: 100%;
+      max-width: 760px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    header h1 {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: .5px;
+      color: var(--accent);
+    }
+    header h1 span { color: var(--text); }
+
+    /* ---- Badge ---- */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      transition: color .2s, border-color .2s;
+    }
+    .badge .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--muted);
+      transition: background .2s;
+    }
+    .badge.connected     { color: var(--accent);  border-color: var(--accent); }
+    .badge.connected .dot{ background: var(--accent); animation: pulse 1.5s infinite; }
+    .badge.connecting    { color: var(--warn);    border-color: var(--warn); }
+    .badge.connecting .dot{ background: var(--warn); }
+    .badge.disconnected  { color: var(--danger);  border-color: var(--danger); }
+    .badge.disconnected .dot{ background: var(--danger); }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: .4; }
+    }
+
+    /* ---- Card ---- */
+    .card {
+      width: 100%;
+      max-width: 760px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+    }
+    .card h2 {
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .8px;
+      color: var(--muted);
+      margin-bottom: 14px;
+    }
+
+    /* ---- WS URL row ---- */
+    .url-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .url-row input {
+      flex: 1;
+      min-width: 200px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 12px;
+      color: var(--text);
+      font-size: 14px;
+      outline: none;
+      transition: border-color .15s;
+    }
+    .url-row input:focus { border-color: var(--accent2); }
+
+    /* ---- Buttons ---- */
+    button {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity .15s;
+    }
+    button:disabled { opacity: .4; cursor: not-allowed; }
+    button:hover:not(:disabled) { opacity: .85; }
+    .btn-primary  { background: var(--accent2); color: #0f1117; }
+    .btn-danger   { background: var(--danger);  color: #0f1117; }
+    .btn-success  { background: var(--accent);  color: #0f1117; }
+    .btn-neutral  { background: var(--border);  color: var(--text); }
+
+    /* ---- Status row ---- */
+    .stat-row {
+      display: flex;
+      gap: 16px;
+      margin-top: 12px;
+      flex-wrap: wrap;
+    }
+    .stat {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 20px;
+      min-width: 110px;
+    }
+    .stat .num { font-size: 28px; font-weight: 700; color: var(--accent); }
+    .stat .lbl { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+    /* ---- Send text ---- */
+    .send-row {
+      display: flex;
+      gap: 8px;
+    }
+    .send-row textarea {
+      flex: 1;
+      resize: vertical;
+      min-height: 80px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 12px;
+      color: var(--text);
+      font-size: 14px;
+      font-family: inherit;
+      line-height: 1.5;
+      outline: none;
+      transition: border-color .15s;
+    }
+    .send-row textarea:focus { border-color: var(--accent); }
+    .send-col { display: flex; flex-direction: column; gap: 6px; }
+
+    /* ---- Preview ---- */
+    .glasses-preview {
+      background: #000;
+      border: 2px solid #333;
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-family: monospace;
+      font-size: 11px;
+      color: #4ade80;
+      line-height: 1.4;
+      min-height: 48px;
+      word-break: break-all;
+      margin-top: 10px;
+    }
+    .glasses-preview .label {
+      font-size: 10px;
+      color: #555;
+      margin-bottom: 4px;
+    }
+
+    /* ---- ACK banner ---- */
+    #ack-banner {
+      font-size: 12px;
+      color: var(--accent);
+      margin-top: 6px;
+      min-height: 18px;
+      transition: opacity .3s;
+    }
+    #ack-banner.hidden { opacity: 0; }
+
+    /* ---- Event log ---- */
+    #event-log {
+      height: 260px;
+      overflow-y: auto;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-family: monospace;
+      font-size: 12px;
+    }
+    #event-log .entry {
+      display: flex;
+      gap: 10px;
+      align-items: baseline;
+      padding: 4px 6px;
+      border-radius: 4px;
+      background: var(--surface);
+    }
+    #event-log .ts   { color: var(--muted); flex-shrink: 0; }
+    #event-log .evt  { font-weight: 700; }
+    #event-log .tap         .evt { color: #a78bfa; }
+    #event-log .double-tap  .evt { color: #60a5fa; }
+    #event-log .scroll-up   .evt { color: #4ade80; }
+    #event-log .scroll-down .evt { color: #fbbf24; }
+    #event-log .abnormal-exit .evt,
+    #event-log .system-exit .evt { color: var(--danger); }
+    #event-log .send-ack    .evt { color: var(--accent2); }
+    #event-log .status-evt  .evt { color: var(--muted); }
+    #event-log .empty { color: var(--muted); padding: 8px; }
+
+    .log-actions {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 8px;
+    }
+
+    /* ---- Footer ---- */
+    footer {
+      color: var(--muted);
+      font-size: 11px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ===== Header ===== -->
+<header>
+  <h1>G2 <span>Dashboard</span></h1>
+  <div id="ws-badge" class="badge disconnected">
+    <span class="dot"></span>
+    <span id="ws-badge-text">Not connected</span>
+  </div>
+</header>
+
+<!-- ===== Server connection ===== -->
+<div class="card">
+  <h2>Server Connection</h2>
+  <div class="url-row">
+    <input id="ws-url" type="text" placeholder="ws://localhost:8765" value="ws://localhost:8765" />
+    <button id="btn-connect" class="btn-primary">Connect</button>
+    <button id="btn-disconnect" class="btn-danger" disabled>Disconnect</button>
+  </div>
+  <div class="stat-row">
+    <div class="stat">
+      <span class="num" id="stat-glasses">0</span>
+      <span class="lbl">Glasses</span>
+    </div>
+    <div class="stat">
+      <span class="num" id="stat-dashboards">0</span>
+      <span class="lbl">Dashboards</span>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Send text ===== -->
+<div class="card">
+  <h2>Send Text to Glasses</h2>
+  <div class="send-row">
+    <textarea id="send-text" placeholder="Enter text to display on the glasses&#10;(Ctrl+Enter to send)"></textarea>
+    <div class="send-col">
+      <button id="btn-send" class="btn-success" disabled>Send</button>
+      <button id="btn-clear-text" class="btn-neutral">Clear</button>
+    </div>
+  </div>
+  <div id="ack-banner" class="hidden"></div>
+  <div class="glasses-preview">
+    <div class="label">Glasses display preview (576 × 288 px)</div>
+    <div id="preview-text">—</div>
+  </div>
+</div>
+
+<!-- ===== Event log ===== -->
+<div class="card">
+  <h2>Glasses Input Event Log</h2>
+  <div class="log-actions">
+    <button id="btn-clear-log" class="btn-neutral" style="font-size:11px;padding:4px 10px;">Clear log</button>
+  </div>
+  <div id="event-log">
+    <div class="empty">Waiting for events…</div>
+  </div>
+</div>
+
+<footer>G2 WebSocket Server — run server.py in the ws folder</footer>
+
+<!-- ===== JS ===== -->
+<script>
+  // ---------------------------------------------------------------------------
+  // DOM refs
+  // ---------------------------------------------------------------------------
+  const wsUrlInput     = document.getElementById('ws-url');
+  const btnConnect     = document.getElementById('btn-connect');
+  const btnDisconnect  = document.getElementById('btn-disconnect');
+  const wsBadge        = document.getElementById('ws-badge');
+  const wsBadgeText    = document.getElementById('ws-badge-text');
+  const sendText       = document.getElementById('send-text');
+  const btnSend        = document.getElementById('btn-send');
+  const btnClearText   = document.getElementById('btn-clear-text');
+  const ackBanner      = document.getElementById('ack-banner');
+  const previewText    = document.getElementById('preview-text');
+  const eventLog       = document.getElementById('event-log');
+  const btnClearLog    = document.getElementById('btn-clear-log');
+  const statGlasses    = document.getElementById('stat-glasses');
+  const statDashboards = document.getElementById('stat-dashboards');
+
+  // ---------------------------------------------------------------------------
+  // WebSocket
+  // ---------------------------------------------------------------------------
+  let ws = null;
+  let ackTimer = null;
+
+  function setStatus(status, detail) {
+    wsBadge.className = 'badge ' + status;
+    const labels = { connected: 'Connected', connecting: 'Connecting…', disconnected: 'Not connected' };
+    wsBadgeText.textContent = detail || labels[status] || status;
+  }
+
+  function setSendEnabled(enabled) {
+    btnSend.disabled      = !enabled;
+    btnDisconnect.disabled = !enabled;
+    btnConnect.disabled   = enabled;
+  }
+
+  function connect() {
+    const url = wsUrlInput.value.trim();
+    if (!url) return;
+
+    if (ws) { ws.close(); ws = null; }
+
+    setStatus('connecting');
+    ws = new WebSocket(url);
+
+    ws.addEventListener('open', () => {
+      setStatus('connected');
+      setSendEnabled(true);
+      // Register as Dashboard
+      ws.send(JSON.stringify({ type: 'register' }));
+      addLogEntry({ type: 'status-evt', event: 'connected', message: `Connected to ${url}` });
+    });
+
+    ws.addEventListener('message', (ev) => {
+      let data;
+      try { data = JSON.parse(ev.data); } catch { return; }
+
+      if (data.type === 'glasses-input') {
+        addLogEntry(data);
+      } else if (data.type === 'status') {
+        statGlasses.textContent    = data.glasses    ?? '0';
+        statDashboards.textContent = data.dashboards ?? '0';
+      } else if (data.type === 'send-ack') {
+        showAck(data.text, data.sent_to);
+      }
+    });
+
+    ws.addEventListener('close', () => {
+      ws = null;
+      setStatus('disconnected');
+      setSendEnabled(false);
+      statGlasses.textContent    = '0';
+      statDashboards.textContent = '0';
+      addLogEntry({ type: 'status-evt', event: 'disconnected', message: 'Disconnected from server' });
+    });
+
+    ws.addEventListener('error', () => {
+      addLogEntry({ type: 'status-evt', event: 'error', message: 'Connection error' });
+    });
+  }
+
+  function disconnect() {
+    if (ws) { ws.close(); ws = null; }
+    setStatus('disconnected');
+    setSendEnabled(false);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Send text
+  // ---------------------------------------------------------------------------
+  function sendToGlasses() {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    const text = sendText.value.trim();
+    if (!text) return;
+    ws.send(JSON.stringify({ type: 'send-text', text }));
+    previewText.textContent = text;
+  }
+
+  function showAck(text, sentTo) {
+    if (ackTimer) clearTimeout(ackTimer);
+    ackBanner.textContent = `✓ Sent to ${sentTo} glasses: "${text}"`;
+    ackBanner.classList.remove('hidden');
+    ackTimer = setTimeout(() => ackBanner.classList.add('hidden'), 3000);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Event log
+  // ---------------------------------------------------------------------------
+  const EVENT_ICONS = {
+    'tap':           '👆 Tap',
+    'double-tap':    '✌️ Double tap',
+    'scroll-up':     '⬆️ Scroll up',
+    'scroll-down':   '⬇️ Scroll down',
+    'abnormal-exit': '⚠️ Abnormal exit',
+    'system-exit':   '🔴 System exit',
+  };
+
+  function addLogEntry(data) {
+    // Remove empty placeholder
+    const empty = eventLog.querySelector('.empty');
+    if (empty) empty.remove();
+
+    const entry  = document.createElement('div');
+    const typeClass = data.type === 'status-evt' ? 'status-evt'
+                    : data.type === 'send-ack'   ? 'send-ack'
+                    : data.event ?? 'unknown';
+    entry.className = 'entry ' + typeClass;
+
+    const ts = new Date(data.timestamp ?? Date.now());
+    const hms = ts.toLocaleTimeString('en-US', { hour12: false });
+
+    let evtText;
+    if (data.type === 'status-evt') {
+      evtText = data.message;
+    } else if (data.type === 'send-ack') {
+      evtText = `Sent \u2192 "${data.text}" (${data.sent_to} glasses)`;
+    } else {
+      evtText = EVENT_ICONS[data.event] ?? data.event;
+    }
+
+    entry.innerHTML = `
+      <span class="ts">${hms}</span>
+      <span class="evt">${escHtml(evtText)}</span>
+    `;
+    eventLog.appendChild(entry);
+    eventLog.scrollTop = eventLog.scrollHeight;
+  }
+
+  function escHtml(s) {
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  // ---------------------------------------------------------------------------
+  // Event listeners
+  // ---------------------------------------------------------------------------
+  btnConnect.addEventListener('click', connect);
+  btnDisconnect.addEventListener('click', disconnect);
+  btnClearText.addEventListener('click', () => { sendText.value = ''; sendText.focus(); });
+  btnSend.addEventListener('click', sendToGlasses);
+  btnClearLog.addEventListener('click', () => {
+    eventLog.innerHTML = '<div class="empty">Waiting for events…</div>';
+  });
+
+  // Ctrl+Enter to send
+  sendText.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      sendToGlasses();
+    }
+  });
+
+  // Enter key in wsUrlInput to connect
+  wsUrlInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') connect();
+  });
+</script>
+</body>
+</html>

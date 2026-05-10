@@ -63,6 +63,13 @@ const bridge = await waitForEvenAppBridge()
 // bridge.setLocalStorage / getLocalStorage are simple key-value string stores.
 const STORAGE_KEY = 'g2_lastText'
 
+// Auto-clear: key and runtime state.
+// Declared here (near the bridge init) so the value can be restored before any sends occur
+// and so the control functions (_w.setAutoClear / _w.clearAutoClear) can be exposed early.
+const AUTO_CLEAR_KEY = 'g2_autoClearMs'
+let autoClearMs = 0                                            // 0 = disabled
+let autoClearTimer: ReturnType<typeof setTimeout> | null = null
+
 // Restore the last text sent to the glasses.
 // Returns an empty string if the key does not exist yet.
 let savedText: string = await bridge.getLocalStorage(STORAGE_KEY)
@@ -73,6 +80,16 @@ if(savedText.length < 1) {
 
 // Notify the Web UI of the restored text so the input field can be pre-filled.
 window.dispatchEvent(new CustomEvent('glasses-text-restored', { detail: { savedText } }))
+
+// Restore auto-clear delay from SDK storage.
+// Must run early (before createStartUpPageContainer) so autoClearMs is active from the
+// very first send, and the UI is updated before the user can interact with the Set button.
+const savedAutoClearMs = parseInt(await bridge.getLocalStorage(AUTO_CLEAR_KEY), 10)
+if (!isNaN(savedAutoClearMs) && savedAutoClearMs > 0) {
+  autoClearMs = savedAutoClearMs
+  console.log(`[AutoClear] Restored: ${autoClearMs}ms`)
+  window.dispatchEvent(new CustomEvent('auto-clear-restored', { detail: { ms: autoClearMs } }))
+}
 
 // Define the single text container that fills the entire G2 display (576 × 288).
 // G2 notes:
@@ -88,7 +105,7 @@ const mainText = new TextContainerProperty({
   yPosition: 0,       // top edge of display
   width: 576,         // full display width
   height: 288,        // full display height
-  borderWidth: 1,
+  borderWidth: 0,
   borderColor: 2,     // dark grey border
   paddingLength: 4,
   containerID: 1,
@@ -120,6 +137,21 @@ if (result !== 0) {
   console.log('Page rebuilt:', rebuilt ? 'success' : 'failed')
 }
 
+// Start the auto-clear timer for the initial display.
+// createStartUpPageContainer / rebuildPageContainer bypass dispatchUpgrade(), so
+// we manually arm the timer here if a delay has been restored from storage.
+if (autoClearMs > 0) {
+  if (autoClearTimer) { clearTimeout(autoClearTimer); autoClearTimer = null }
+  autoClearTimer = setTimeout(async () => {
+    autoClearTimer = null
+    await bridge.textContainerUpgrade(new TextContainerUpgrade({
+      containerID: 1,
+      content: ' ',
+    }))
+    window.dispatchEvent(new CustomEvent('glasses-auto-cleared'))
+  }, autoClearMs)
+}
+
 // ---------------------------------------------------------------------------
 // Throttled text update
 // ---------------------------------------------------------------------------
@@ -132,6 +164,15 @@ const THROTTLE_MS = 2000        // minimum milliseconds between sends
 let lastSentAt = 0              // timestamp of the last successful send
 let pendingText: string | null = null          // text queued during cooldown
 let throttleTimer: ReturnType<typeof setTimeout> | null = null
+
+// ---------------------------------------------------------------------------
+// Auto-clear timer
+// ---------------------------------------------------------------------------
+// If autoClearMs > 0, the glasses display is overwritten with a single space
+// character after this many milliseconds following each send.
+// A single space is required because G2 does not accept empty content strings.
+// The textarea is NOT affected — only the glasses display is cleared.
+// (AUTO_CLEAR_KEY, autoClearMs, autoClearTimer are declared above near STORAGE_KEY)
 
 /**
  * Actually send the text to the glasses and persist it.
@@ -148,6 +189,22 @@ async function dispatchUpgrade(text: string): Promise<void> {
   await bridge.setLocalStorage(STORAGE_KEY, text)
   // Notify the Web UI that the send completed.
   window.dispatchEvent(new CustomEvent('glasses-sent', { detail: { text } }))
+
+  // Reset auto-clear timer. A new send always cancels any previous clear schedule.
+  if (autoClearTimer) { clearTimeout(autoClearTimer); autoClearTimer = null }
+  if (autoClearMs > 0) {
+    autoClearTimer = setTimeout(async () => {
+      autoClearTimer = null
+      // Overwrite the glasses display with a single space to blank it out.
+      // G2 does not accept empty strings, so a space character is the minimum.
+      // Storage and the textarea are intentionally NOT updated here.
+      await bridge.textContainerUpgrade(new TextContainerUpgrade({
+        containerID: 1,
+        content: ' ',
+      }))
+      window.dispatchEvent(new CustomEvent('glasses-auto-cleared'))
+    }, autoClearMs)
+  }
 }
 
 /**
@@ -181,14 +238,33 @@ async function sendToGlasses(text: string): Promise<void> {
   }
 }
 
-// Expose sendToGlasses to the non-module script in index.html.
-// window is typed as Record<string, unknown> to satisfy TypeScript strict mode.
-;(window as unknown as Record<string, unknown>).sendToGlasses = sendToGlasses
+// Shared typed reference to window for all exposed functions.
+// Defined here so _w.setAutoClear / _w.clearAutoClear are available as soon as
+// the bridge is ready (early in the init sequence), not blocked behind WebSocket setup.
+const _w = window as unknown as Record<string, unknown>
+_w.sendToGlasses = sendToGlasses
 
 // Expose clearStorage: wipes the saved text from SDK storage and clears the input field.
-;(window as unknown as Record<string, unknown>).clearStorage = async () => {
+_w.clearStorage = async () => {
   await bridge.setLocalStorage(STORAGE_KEY, '')
   window.dispatchEvent(new CustomEvent('storage-cleared'))
+}
+
+// Expose auto-clear controls early so the Set button works immediately after bridge init.
+// setAutoClear: set the delay in ms. Pass 0 to disable.
+_w.setAutoClear = async (ms: number) => {
+  autoClearMs = ms > 0 ? ms : 0
+  if (autoClearTimer && autoClearMs === 0) { clearTimeout(autoClearTimer); autoClearTimer = null }
+  await bridge.setLocalStorage(AUTO_CLEAR_KEY, String(autoClearMs))
+  window.dispatchEvent(new CustomEvent('auto-clear-changed', { detail: { ms: autoClearMs } }))
+}
+
+// clearAutoClear: disable and cancel any pending clear timer.
+_w.clearAutoClear = async () => {
+  autoClearMs = 0
+  if (autoClearTimer) { clearTimeout(autoClearTimer); autoClearTimer = null }
+  await bridge.setLocalStorage(AUTO_CLEAR_KEY, '0')
+  window.dispatchEvent(new CustomEvent('auto-clear-changed', { detail: { ms: 0 } }))
 }
 
 // ---------------------------------------------------------------------------
@@ -232,5 +308,125 @@ bridge.onEvenHubEvent((event) => {
 
   // Relay the event to index.html for visualization.
   window.dispatchEvent(new CustomEvent('glasses-input', { detail: { name } }))
+
+  // Also forward glasses input events to the WebSocket server as JSON.
+  wsSend(JSON.stringify({ type: 'glasses-input', event: name, timestamp: Date.now() }))
 })
+
+// ---------------------------------------------------------------------------
+// WebSocket client
+// ---------------------------------------------------------------------------
+// Receives text messages from a remote server and sends them to the glasses.
+// G2 input events are forwarded to the server as JSON.
+//
+// Protocol (text frames only):
+//   Server → Client: plain text string → displayed on glasses + textbox
+//   Client → Server: JSON { type: 'glasses-input', event: string, timestamp: number }
+//
+// Reconnection uses exponential backoff capped at 30 s.
+
+const WS_URL_KEY = 'g2_wsUrl'
+const WS_BACKOFF_BASE = 1000   // initial retry delay in ms
+const WS_BACKOFF_MAX  = 30000  // maximum retry delay in ms
+
+let ws: WebSocket | null = null
+let wsRetryTimer: ReturnType<typeof setTimeout> | null = null
+let wsBackoff = WS_BACKOFF_BASE
+let wsIntentionalClose = false  // true when user explicitly disconnects
+
+/** Send a message if the socket is open. */
+function wsSend(data: string): void {
+  if (ws && ws.readyState === WebSocket.OPEN) ws.send(data)
+}
+
+/** Update the connection status badge in the UI. */
+function wsSetStatus(status: 'connected' | 'connecting' | 'disconnected', detail = ''): void {
+  window.dispatchEvent(new CustomEvent('ws-status', { detail: { status, detail } }))
+}
+
+/** Open a WebSocket connection to the given URL. */
+function wsConnect(url: string): void {
+  if (ws) { wsIntentionalClose = true; ws.close(); ws = null }
+  wsIntentionalClose = false
+  wsSetStatus('connecting', url)
+  console.log(`[WS] Connecting to ${url}`)
+
+  try {
+    ws = new WebSocket(url)
+  } catch (e) {
+    console.error('[WS] Invalid URL:', e)
+    wsSetStatus('disconnected', 'Invalid URL')
+    return
+  }
+
+  ws.addEventListener('open', () => {
+    wsBackoff = WS_BACKOFF_BASE  // reset backoff on successful connection
+    console.log('[WS] Connected')
+    wsSetStatus('connected', url)
+    // Notify the server that the client has connected.
+    wsSend(JSON.stringify({ type: 'connect', timestamp: Date.now() }))
+  })
+
+  ws.addEventListener('message', (ev) => {
+    const text = typeof ev.data === 'string' ? ev.data.trim() : ''
+    if (!text) return
+    console.log('[WS] Received:', text)
+    // Update the textbox in the UI.
+    window.dispatchEvent(new CustomEvent('ws-text-received', { detail: { text } }))
+    // Send to glasses via the same throttled path used by the manual input.
+    sendToGlasses(text)
+  })
+
+  ws.addEventListener('close', (ev) => {
+    ws = null
+    if (wsIntentionalClose) {
+      console.log('[WS] Disconnected (user request)')
+      wsSetStatus('disconnected')
+      return
+    }
+    console.warn(`[WS] Connection closed (code ${ev.code}). Retrying in ${wsBackoff / 1000}s…`)
+    wsSetStatus('connecting', `Retry in ${wsBackoff / 1000}s…`)
+    wsRetryTimer = setTimeout(() => {
+      wsBackoff = Math.min(wsBackoff * 2, WS_BACKOFF_MAX)
+      wsConnect(url)
+    }, wsBackoff)
+  })
+
+  ws.addEventListener('error', () => {
+    console.error('[WS] Connection error')
+    // The 'close' event will fire immediately after and handle retry.
+  })
+}
+
+/** Disconnect and cancel any pending retry. */
+function wsDisconnect(): void {
+  if (wsRetryTimer) { clearTimeout(wsRetryTimer); wsRetryTimer = null }
+  wsIntentionalClose = true
+  if (ws) { ws.close(); ws = null }
+  wsSetStatus('disconnected')
+  console.log('[WS] Disconnected')
+}
+
+// Restore saved WebSocket URL and auto-connect if present.
+const savedWsUrl: string = await bridge.getLocalStorage(WS_URL_KEY)
+if (savedWsUrl) {
+  console.log('[WS] Auto-connecting to saved URL:', savedWsUrl)
+  window.dispatchEvent(new CustomEvent('ws-url-restored', { detail: { url: savedWsUrl } }))
+  wsConnect(savedWsUrl)
+}
+
+// Expose WebSocket controls to the non-module scripts in index.html.
+// _w is already defined above (near sendToGlasses).
+_w.wsConnect = async (url: string) => {
+  await bridge.setLocalStorage(WS_URL_KEY, url)
+  wsConnect(url)
+}
+_w.wsDisconnect = wsDisconnect
+_w.wsClearUrl = async () => {
+  wsDisconnect()
+  await bridge.setLocalStorage(WS_URL_KEY, '')
+  window.dispatchEvent(new CustomEvent('ws-url-cleared'))
+}
+
+// (auto-clear restore, setAutoClear, clearAutoClear are defined earlier near sendToGlasses)
 
