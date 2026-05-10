@@ -26,7 +26,8 @@ Demo(QR Code): https://sabowl.sakura.ne.jp/g2/helloworld/
 - **Text sender** — Send any text from the Web UI to the G2 display (throttled to a minimum 2-second interval)
 - **Last input restore** — Saves the last sent text to SDK storage and re-displays it automatically on next launch
 - **Input event visualizer** — Tap, double-tap, scroll up/down, abnormal exit, and system exit events are shown in real time on the Web UI
-- **UI switch on bridge connect** — Once the app is successfully loaded on the glasses, the QR section hides and the control UI appears
+- **In-WebView console** — `console.log` / `.warn` / `.error` output is captured and shown in the browser panel for on-device debugging
+- **Storage controls** — **Clear Storage** wipes the persisted text from SDK storage; **Reload** refreshes the page
 
 ---
 
@@ -91,6 +92,8 @@ Base url config in package.json
 | Type in the textarea → **Ctrl+Enter** | Send text to the G2 display |
 | **Enter** | New line in the textarea |
 | Operate the glasses touchpad | Shown in real time on the event monitor |
+| **Clear Storage** button | Wipes the saved text from SDK storage |
+| **Reload** button | Reloads the page |
 
 ---
 
