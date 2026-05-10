@@ -15,7 +15,45 @@
  *   - No camera, no speaker
  */
 
-import { waitForEvenAppBridge, TextContainerProperty, CreateStartUpPageContainer, TextContainerUpgrade, OsEventTypeList } from '@evenrealities/even_hub_sdk'
+import { waitForEvenAppBridge, TextContainerProperty, CreateStartUpPageContainer, RebuildPageContainer, TextContainerUpgrade, OsEventTypeList } from '@evenrealities/even_hub_sdk'
+
+// ---------------------------------------------------------------------------
+// Console log interception
+// ---------------------------------------------------------------------------
+// Override console.log / .warn / .error so that output is also appended to the
+// #console-output element in the WebView, making logs visible on-device.
+// The original functions are preserved so DevTools output continues to work.
+const _origLog = console.log.bind(console)
+const _origWarn = console.warn.bind(console)
+const _origError = console.error.bind(console)
+
+/**
+ * Append a log line to #console-output.
+ * @param level Log level ('log' | 'warn' | 'error')
+ * @param args  Arguments to display — objects are JSON-stringified
+ */
+function appendLog(level: 'log' | 'warn' | 'error', args: unknown[]) {
+  const el = document.querySelector<HTMLDivElement>('#console-output')
+  if (!el) return
+  const line = document.createElement('div')
+  // Text colour by level: error=red / warn=yellow / log=green
+  const color = level === 'error' ? '#f66' : level === 'warn' ? '#fa0' : '#cfc'
+  line.style.cssText = `color:${color};font-size:12px;border-bottom:1px solid #333;padding:2px 0;word-break:break-all;`
+  line.textContent = `[${level}] ${args.map(a => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ')}`
+  el.appendChild(line)
+  // Auto-scroll to keep the latest log visible
+  el.scrollTop = el.scrollHeight
+}
+
+// Forward to original handler, then append to screen.
+// Skip SDK-internal debug lines starting with '[EvenAppBridge]' or '[Simulator]'.
+console.log = (...args) => {
+  _origLog(...args)
+  if (args.length > 0 && typeof args[0] === 'string' && (args[0].startsWith('[EvenAppBridge]') || args[0].startsWith('[Simulator]'))) return
+  appendLog('log', args)
+}
+console.warn = (...args) => { _origWarn(...args); appendLog('warn', args) }
+console.error = (...args) => { _origError(...args); appendLog('error', args) }
 
 // Wait for the native bridge to be injected by the Even Hub host app.
 // This must always be the first SDK call. Do NOT call any other bridge method before this resolves.
@@ -27,14 +65,14 @@ const STORAGE_KEY = 'g2_lastText'
 
 // Restore the last text sent to the glasses.
 // Returns an empty string if the key does not exist yet.
-const savedText: string = await bridge.getLocalStorage(STORAGE_KEY)
+let savedText: string = await bridge.getLocalStorage(STORAGE_KEY)
 
-// Notify the Web UI that the bridge is ready.
-// index.html listens for this event to hide the QR section and show the control UI.
-// bridge.ready is true once waitForEvenAppBridge() has resolved.
-if (bridge != null && bridge.ready) {
-  window.dispatchEvent(new CustomEvent('glasses-ready', { detail: { savedText } }))
+if(savedText.length < 1) {
+  savedText = 'Hello World'
 }
+
+// Notify the Web UI of the restored text so the input field can be pre-filled.
+window.dispatchEvent(new CustomEvent('glasses-text-restored', { detail: { savedText } }))
 
 // Define the single text container that fills the entire G2 display (576 × 288).
 // G2 notes:
@@ -69,15 +107,17 @@ const result = await bridge.createStartUpPageContainer(new CreateStartUpPageCont
 }))
 console.log('Page created:', result === 0 ? 'success' : 'failed')
 
-// Fallback: if createStartUpPageContainer failed and we have saved text,
-// try to update the existing container in-place with textContainerUpgrade.
-// This can happen when the page reloads while the glasses still have the previous container.
-if (result !== 0 && savedText) {
-  console.log('createStartUpPageContainer failed, falling back to textContainerUpgrade')
-  await bridge.textContainerUpgrade(new TextContainerUpgrade({
-    containerID: 1,
-    content: savedText,
+// Fallback: if createStartUpPageContainer failed, the glasses may already have a page from a
+// previous session. Rebuild all containers from scratch using rebuildPageContainer, which tears
+// down the existing page and redraws it.
+if (result !== 0) {
+  console.log('createStartUpPageContainer failed, falling back to rebuildPageContainer')
+  mainText.content = savedText || 'Hello World'
+  const rebuilt = await bridge.rebuildPageContainer(new RebuildPageContainer({
+    containerTotalNum: 1,
+    textObject: [mainText],
   }))
+  console.log('Page rebuilt:', rebuilt ? 'success' : 'failed')
 }
 
 // ---------------------------------------------------------------------------
@@ -144,6 +184,12 @@ async function sendToGlasses(text: string): Promise<void> {
 // Expose sendToGlasses to the non-module script in index.html.
 // window is typed as Record<string, unknown> to satisfy TypeScript strict mode.
 ;(window as unknown as Record<string, unknown>).sendToGlasses = sendToGlasses
+
+// Expose clearStorage: wipes the saved text from SDK storage and clears the input field.
+;(window as unknown as Record<string, unknown>).clearStorage = async () => {
+  await bridge.setLocalStorage(STORAGE_KEY, '')
+  window.dispatchEvent(new CustomEvent('storage-cleared'))
+}
 
 // ---------------------------------------------------------------------------
 // G2 input event listener

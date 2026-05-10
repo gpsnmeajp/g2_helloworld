@@ -63,7 +63,6 @@
         box-shadow: 0 4px 20px rgba(0,0,0,0.12);
         width: 380px;
         margin-top: 20px;
-        display: none;
       }
       #text-sender h2 {
         margin: 0 0 12px;
@@ -98,6 +97,26 @@
       }
       #send-btn:hover:not(:disabled) { background: #333; }
       #send-btn:disabled { background: #aaa; cursor: not-allowed; }
+      .action-row {
+        display: flex;
+        gap: 8px;
+        margin-top: 8px;
+      }
+      .action-btn {
+        flex: 1;
+        padding: 8px;
+        font-size: 13px;
+        font-weight: 600;
+        border: 1px solid #ccc;
+        border-radius: 8px;
+        background: #fff;
+        color: #333;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+      .action-btn:hover { background: #f0f0f0; }
+      .action-btn.danger { border-color: #c0392b; color: #c0392b; }
+      .action-btn.danger:hover { background: #fdecea; }
       #send-status {
         margin-top: 8px;
         font-size: 12px;
@@ -112,7 +131,6 @@
         box-shadow: 0 4px 20px rgba(0,0,0,0.12);
         width: 380px;
         margin-top: 20px;
-        display: none;
       }
       #event-monitor h2 {
         margin: 0 0 14px;
@@ -162,6 +180,24 @@
         padding: 2px 0;
       }
       #event-log .log-row .log-time { color: #aaa; flex-shrink: 0; margin-left: 8px; }
+      #console-output-panel {
+        background: #1a1a1a;
+        padding: 16px;
+        border-radius: 16px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+        width: 380px;
+        margin-top: 20px;
+      }
+      #console-output-panel h2 {
+        margin: 0 0 10px;
+        font-size: 16px;
+        color: #eee;
+      }
+      #console-output {
+        max-height: 200px;
+        overflow-y: auto;
+        font-family: monospace;
+      }
     </style>
   </head>
   <body>
@@ -180,6 +216,10 @@
       <h2>Send text to glasses</h2>
       <textarea id="text-input" maxlength="1000" placeholder="Type a message... (Ctrl+Enter to send)"></textarea>
       <button id="send-btn">Send</button>
+      <div class="action-row">
+        <button class="action-btn danger" id="clear-storage-btn">Clear Storage</button>
+        <button class="action-btn" id="reload-btn">Reload</button>
+      </div>
       <div id="send-status">Connect the glasses first via QR code above.</div>
     </div>
 
@@ -194,6 +234,11 @@
         <div class="event-chip warn" id="chip-system-exit"><span class="icon">🔴</span> System Exit</div>
       </div>
       <div id="event-log"></div>
+    </div>
+
+    <div id="console-output-panel">
+      <h2>Console</h2>
+      <div id="console-output"></div>
     </div>
 
     <div id="app"></div>
@@ -253,21 +298,36 @@
           }
         });
 
-        window.addEventListener('glasses-ready', function (e) {
-          document.getElementById('qr-container').style.display = 'none';
-          document.getElementById('text-sender').style.display = 'block';
-          document.getElementById('event-monitor').style.display = 'block';
+        window.addEventListener('glasses-text-restored', function (e) {
           const saved = e.detail && e.detail.savedText;
-          if (saved) {
+          if (saved && saved !== 'Hello World') {
             input.value = saved;
             status.textContent = 'Last message restored.';
-          } else {
-            status.textContent = 'Ready.';
           }
         });
 
         window.addEventListener('glasses-sent', function (e) {
           status.textContent = 'Sent: "' + e.detail.text + '"';
+        });
+
+        document.getElementById('clear-storage-btn').addEventListener('click', function () {
+          if (typeof window.clearStorage !== 'function') {
+            status.textContent = 'Bridge not ready yet.';
+            return;
+          }
+          window.clearStorage().then(function () {
+            input.value = '';
+            status.textContent = 'Storage cleared.';
+          });
+        });
+
+        window.addEventListener('storage-cleared', function () {
+          input.value = '';
+          status.textContent = 'Storage cleared.';
+        });
+
+        document.getElementById('reload-btn').addEventListener('click', function () {
+          window.location.reload();
         });
       })();
     </script>

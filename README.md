@@ -7,6 +7,8 @@
 
 Demo(QR Code): https://sabowl.sakura.ne.jp/g2/helloworld/
 
+![screenshot](image.png)
+
 ---
 
 ## Purpose
