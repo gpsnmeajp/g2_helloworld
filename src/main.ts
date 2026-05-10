@@ -160,7 +160,7 @@ if (autoClearMs > 0) {
 // If a new value arrives during the cooldown, it is queued and sent once the
 // cooldown expires — always sending the latest value, never intermediate ones.
 
-const THROTTLE_MS = 2000        // minimum milliseconds between sends
+const THROTTLE_MS = 100        // minimum milliseconds between sends
 let lastSentAt = 0              // timestamp of the last successful send
 let pendingText: string | null = null          // text queued during cooldown
 let throttleTimer: ReturnType<typeof setTimeout> | null = null
